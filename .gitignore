@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+*.swp
+
+# Xcode
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# 构建产物
+DrinkWater/build/
+
+# 临时文件
+*.log
