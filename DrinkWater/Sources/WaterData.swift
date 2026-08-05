@@ -18,6 +18,8 @@ class WaterData: ObservableObject {
     @Published var lastResetDate: String = ""
     @Published var monthlyRecords: [DailyRecord] = []
     @Published var lastDrinkTime: Date = Date()
+    /// 上次提醒弹出的时间，用于计算提醒间隔
+    @Published var lastReminderTime: Date = Date()
     /// 提醒间隔（秒），默认 2 小时，最短 10 秒
     @Published var reminderInterval: TimeInterval = 2 * 60 * 60
 
@@ -27,10 +29,12 @@ class WaterData: ObservableObject {
     private let lastDateKey = "DrinkWater_lastDate"
     private let recordsKey = "DrinkWater_monthlyRecords"
     private let lastDrinkTimeKey = "DrinkWater_lastDrinkTime"
+    private let lastReminderTimeKey = "DrinkWater_lastReminderTime"
     private let reminderIntervalKey = "DrinkWater_reminderInterval"
 
     init() {
         loadData()
+        AppLog.log("DATA", "加载完成: currentCups=\(currentCups), totalCups=\(totalCups), reminderInterval=\(reminderInterval)s, lastDrinkTime=\(lastDrinkTime), lastReminderTime=\(lastReminderTime)")
         loadMonthlyRecords()
         checkAndResetIfNeeded()
         // 确保今天有记录
@@ -74,6 +78,7 @@ class WaterData: ObservableObject {
         lastDrinkTime = Date()
         updateTodayRecord()
         saveData()
+        AppLog.log("DATA", "喝水+1 => \(currentCups)/\(totalCups), 达成目标=\(hasReachedGoal)")
     }
 
     func recordDrink() {
@@ -84,6 +89,18 @@ class WaterData: ObservableObject {
     /// 距离上次喝水已经过了多少秒
     var secondsSinceLastDrink: TimeInterval {
         Date().timeIntervalSince(lastDrinkTime)
+    }
+
+    /// 距离上次提醒已经过了多少秒
+    var secondsSinceLastReminder: TimeInterval {
+        Date().timeIntervalSince(lastReminderTime)
+    }
+
+    /// 记录提醒已弹出，更新上次提醒时间
+    func markReminderShown() {
+        lastReminderTime = Date()
+        saveData()
+        AppLog.log("DATA", "记录提醒时间 => lastReminderTime=\(lastReminderTime)")
     }
 
     func setTotalCups(_ cups: Int) {
@@ -101,6 +118,7 @@ class WaterData: ObservableObject {
     func checkAndResetIfNeeded() {
         let today = dateString(for: Date())
         if lastResetDate != today {
+            AppLog.log("DATA", "日期变化: lastResetDate=\(lastResetDate) -> today=\(today), 清零")
             // 昨天的日期保存到历史记录
             if !lastResetDate.isEmpty {
                 let yesterday = lastResetDate
@@ -154,6 +172,9 @@ class WaterData: ObservableObject {
         if let lt = defaults.object(forKey: lastDrinkTimeKey) as? Date {
             lastDrinkTime = lt
         }
+        if let lr = defaults.object(forKey: lastReminderTimeKey) as? Date {
+            lastReminderTime = lr
+        }
         // 提醒间隔：默认 2 小时，最短 10 秒
         let savedInterval = defaults.double(forKey: reminderIntervalKey)
         reminderInterval = savedInterval >= 10 ? savedInterval : (2 * 60 * 60)
@@ -164,6 +185,7 @@ class WaterData: ObservableObject {
         defaults.set(totalCups, forKey: totalCupsKey)
         defaults.set(lastResetDate, forKey: lastDateKey)
         defaults.set(lastDrinkTime, forKey: lastDrinkTimeKey)
+        defaults.set(lastReminderTime, forKey: lastReminderTimeKey)
         defaults.set(reminderInterval, forKey: reminderIntervalKey)
     }
 
@@ -171,6 +193,7 @@ class WaterData: ObservableObject {
     func setReminderInterval(_ seconds: TimeInterval) {
         reminderInterval = max(10, seconds)
         saveData()
+        AppLog.log("DATA", "设置提醒间隔 => \(reminderInterval)s")
     }
 
     private func loadMonthlyRecords() {

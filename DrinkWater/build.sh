@@ -24,6 +24,7 @@ swiftc \
     -framework UserNotifications \
     -O \
     "$SOURCES_DIR/WaterData.swift" \
+    "$SOURCES_DIR/AppLog.swift" \
     "$SOURCES_DIR/ContentView.swift" \
     "$SOURCES_DIR/SettingsView.swift" \
     "$SOURCES_DIR/UnifiedPanelView.swift" \
