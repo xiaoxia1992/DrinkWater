@@ -572,7 +572,7 @@ struct UnifiedPanelView: View {
                     let record = records.first(where: { $0.date == item.dateStr })
                     let goalH = barMaxH * CGFloat(waterData.totalCups) / CGFloat(maxCups)
                     let cupH: CGFloat = {
-                        guard let r = record else { return 2 }
+                        guard let r = record else { return 0 }
                         return max(CGFloat(r.cups) / CGFloat(maxCups) * barMaxH, 4)
                     }()
 
@@ -580,24 +580,31 @@ struct UnifiedPanelView: View {
                         // 杯数
                         Text(record.map { "\($0.cups)" } ?? "-")
                             .font(.system(size: 7.5, weight: .bold, design: .rounded))
-                            .foregroundColor(record?.completed == true ? Theme.success : Theme.primary)
+                            .foregroundColor(record?.completed == true ? Theme.success : (record == nil ? Theme.textSecondary.opacity(0.5) : Theme.primary))
                             .frame(height: 12)
 
                         // 柱子
                         ZStack(alignment: .bottom) {
-                            // 目标虚线
-                            Rectangle()
-                                .fill(Theme.warning.opacity(0.5))
-                                .frame(width: 13.5, height: 0.8)
-                                .offset(y: -goalH)
-                            // 柱
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(record?.completed == true
-                                      ? AnyShapeStyle(Theme.successGradient)
-                                      : AnyShapeStyle(Theme.primaryGradient))
-                                .frame(width: 18, height: cupH)
+                            if let r = record {
+                                // 目标虚线（仅在有数据时显示）
+                                Rectangle()
+                                    .fill(Theme.warning.opacity(0.5))
+                                    .frame(width: 13.5, height: 0.8)
+                                    .offset(y: -goalH)
+                                // 柱
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(r.completed
+                                          ? AnyShapeStyle(Theme.successGradient)
+                                          : AnyShapeStyle(Theme.primaryGradient))
+                                    .frame(width: 18, height: cupH)
+                            } else {
+                                // 无数据：底部一个浅灰小点
+                                Circle()
+                                    .fill(Theme.textSecondary.opacity(0.3))
+                                    .frame(width: 3, height: 3)
+                            }
                         }
-                        .frame(width: 18, height: barMaxH)
+                        .frame(width: 18, height: barMaxH, alignment: .bottom)
 
                         // 星期
                         Text(item.weekday)
