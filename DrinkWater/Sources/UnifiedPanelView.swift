@@ -260,13 +260,13 @@ struct UnifiedPanelView: View {
                 } else {
                     HStack(spacing: 4) {
                         Text("还差")
-                            .font(.system(size: 12))
+                            .font(.system(size: 16))
                             .foregroundColor(Theme.textSecondary)
                         Text("\(waterData.totalCups - waterData.currentCups)")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
                             .foregroundColor(Theme.primary)
                         Text("杯达成今日目标")
-                            .font(.system(size: 12))
+                            .font(.system(size: 16))
                             .foregroundColor(Theme.textSecondary)
                     }
                 }
