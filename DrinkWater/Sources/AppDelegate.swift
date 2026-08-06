@@ -56,9 +56,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let panelView = UnifiedPanelView(waterData: waterData)
 
         let hosting = NSHostingController(rootView: panelView)
-        let window = KeyablePanel(contentViewController: hosting)
-        window.setContentSize(NSSize(width: 315, height: 349))
-        window.styleMask = [.borderless, .nonactivatingPanel]
+        let contentRect = NSRect(x: 0, y: 0, width: 315, height: 349)
+        let window = KeyablePanel(
+            contentRect: contentRect,
+            styleMask: [.titled, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentViewController = hosting
+        // 隐藏标题栏但保留接收事件能力
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.standardWindowButton(.closeButton)?.isHidden = true
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
         window.level = .floating
         window.backgroundColor = .clear
         window.isOpaque = false
@@ -67,7 +78,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.isMovableByWindowBackground = true
         window.hidesOnDeactivate = false
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-        window.becomesKeyOnlyIfNeeded = false
 
         // 右上角放置
         if let screen = NSScreen.main {
@@ -80,8 +90,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         window.makeKeyAndOrderFront(nil)
-
-        window.orderFrontRegardless()
         widgetWindow = window
     }
 
