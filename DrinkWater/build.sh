@@ -8,8 +8,14 @@ APP_DIR="$BUILD_DIR/$APP_NAME"
 SOURCES_DIR="$PROJECT_DIR/Sources"
 RESOURCES_DIR="$PROJECT_DIR/Resources"
 BINARY_PATH="$APP_DIR/Contents/MacOS/DrinkWater"
+INSTALL_DIR="/Applications/$APP_NAME"
 
 echo "🔨 正在编译饮水提醒应用..."
+
+# 杀掉旧进程
+pkill -f "饮水提醒" 2>/dev/null || true
+pkill -f "DrinkWater" 2>/dev/null || true
+sleep 1
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
@@ -40,14 +46,13 @@ python3 "$PROJECT_DIR/build_icon.py" 2>&1 | grep -E "✅|错误" || true
 
 echo ""
 echo "✅ 构建完成！"
-echo "📦 应用位置: $APP_DIR"
-echo ""
-echo "你可以双击打开应用，或运行:"
-echo "  open \"$APP_DIR\""
-echo ""
-read -p "是否立即启动应用？(y/n) " -n 1 -r
-echo
-if [[ $REPLY =~ ^[Yy]$ ]]; then
-    open "$APP_DIR"
-    echo "应用已启动"
-fi
+
+# 安装到 /Applications
+echo "📦 正在安装到 /Applications..."
+rm -rf "$INSTALL_DIR"
+cp -R "$APP_DIR" "$INSTALL_DIR"
+echo "✅ 已安装到 $INSTALL_DIR"
+
+# 启动
+open "$INSTALL_DIR"
+echo "🚀 应用已启动"

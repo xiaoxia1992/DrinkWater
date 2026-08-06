@@ -80,6 +80,7 @@ struct UnifiedPanelView: View {
     @ObservedObject var waterData: WaterData
     @State private var selectedTab: PanelTab = .today
     @State private var lastTab: PanelTab = .today   // 记录离开设置页前的 tab
+    @State private var statsRange: StatsRange = .last7   // 统计页时间范围
 
     var body: some View {
         VStack(spacing: 0) {
@@ -92,12 +93,17 @@ struct UnifiedPanelView: View {
                     todayView.transition(.opacity)
                 }
                 if selectedTab == .stats {
-                    statsView.transition(.opacity)
+                    statsView
+                        .transition(.opacity)
+                        .onAppear { logStats() }
                 }
                 if selectedTab == .settings {
                     SettingsPage(
                         waterData: waterData,
-                        onBack: { withAnimation(.easeInOut(duration: 0.25)) { selectedTab = lastTab } }
+                        onBack: {
+                            AppLog.log("UI", "返回: 设置 -> \(lastTab.rawValue)")
+                            withAnimation(.easeInOut(duration: 0.25)) { selectedTab = lastTab }
+                        }
                     )
                     .transition(.asymmetric(
                         insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -169,6 +175,7 @@ struct UnifiedPanelView: View {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     selectedTab = .settings
                 }
+                AppLog.log("UI", "点击设置按钮")
             }) {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 14))
@@ -188,6 +195,9 @@ struct UnifiedPanelView: View {
     private func tabPill(_ tab: PanelTab) -> some View {
         let isSelected = selectedTab == tab
         return Button(action: {
+            // 确保 window 是 key，否则点击可能不生效
+            NSApp.windows.forEach { if $0 is NSPanel { $0.makeKey() } }
+            AppLog.log("UI", "切换Tab: \(tab.rawValue)")
             withAnimation(.easeInOut(duration: 0.2)) { selectedTab = tab }
         }) {
             HStack(spacing: 4) {
@@ -290,8 +300,11 @@ struct UnifiedPanelView: View {
             .padding(.bottom, 14)
         }
         .alert("重置今日数据？", isPresented: $showResetAlert) {
-            Button("取消", role: .cancel) {}
+            Button("取消", role: .cancel) {
+                AppLog.log("UI", "取消重置")
+            }
             Button("确认重置", role: .destructive) {
+                AppLog.log("UI", "确认重置今日数据")
                 waterData.resetToday()
             }
         } message: {
@@ -329,6 +342,7 @@ struct UnifiedPanelView: View {
 
     private var mainDrinkButton: some View {
         Button(action: {
+            AppLog.log("UI", "点击喝水按钮")
             withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
                 waterData.incrementCup()
             }
@@ -368,23 +382,50 @@ struct UnifiedPanelView: View {
 
     // MARK: - 统计页
 
-    private var statsView: some View {
-        let records = waterData.sortedMonthlyRecords
-        let completed = waterData.monthlyCompletedDays
-        let days = waterData.monthlyDays
-        let completionRate = days > 0 ? Double(completed) / Double(days) : 0
+    private func logStats() {
+        let records = waterData.records(for: statsRange)
+        let completed = waterData.completedDays(for: statsRange)
+        let days = waterData.totalDays(for: statsRange)
+        let rate = waterData.completionRate(for: statsRange)
+        AppLog.log("STATS", "统计页加载[\(statsRange.rawValue)]: 完成天数=\(completed)/\(days), 完成率=\(Int(rate * 100))%, 总杯数=\(waterData.totalCups(for: statsRange)), 日均=\(String(format: "%.1f", waterData.avgCups(for: statsRange))), 记录数=\(records.count)")
+        AppLog.log("STATS", "明细[\(statsRange.rawValue)]: \(records.map { "\($0.date) \($0.cups)/\($0.total)" }.joined(separator: ", "))")
+    }
 
+    private var statsView: some View {
         return ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 14) {
-                // 月度完成率大圆环
+                // 时间范围切换
+                HStack(spacing: 2) {
+                    ForEach(StatsRange.allCases, id: \.self) { r in
+                        Button(action: {
+                            AppLog.log("UI", "切换统计范围: \(r.rawValue)")
+                            withAnimation(.easeInOut(duration: 0.2)) { statsRange = r }
+                        }) {
+                            Text(r.rawValue)
+                                .font(.system(size: 11, weight: statsRange == r ? .semibold : .medium))
+                                .foregroundColor(statsRange == r ? .white : Theme.textSecondary)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(
+                                    Capsule().fill(statsRange == r ? AnyShapeStyle(Theme.primaryGradient) : AnyShapeStyle(Color.clear))
+                                )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(3)
+                .background(Capsule().fill(Color.white.opacity(0.7)))
+
+                // 完成率大圆环
                 HStack(spacing: 16) {
                     ZStack {
-                        RingProgressView(progress: completionRate, lineWidth: 10,
+                        RingProgressView(progress: waterData.completionRate(for: statsRange), lineWidth: 10,
                                          trackColor: Color.gray.opacity(0.15),
                                          gradientColors: [Theme.primary, Theme.primaryDark])
                             .frame(width: 90, height: 90)
                         VStack(spacing: 0) {
-                            Text("\(Int(completionRate * 100))%")
+                            Text("\(Int(waterData.completionRate(for: statsRange) * 100))%")
                                 .font(.system(size: 22, weight: .bold, design: .rounded))
                                 .foregroundStyle(Theme.primaryGradient)
                             Text("完成率")
@@ -395,19 +436,19 @@ struct UnifiedPanelView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 4) {
                             Circle().fill(Theme.success).frame(width: 8, height: 8)
-                            Text("完成天数: \(completed) / \(days) 天")
+                            Text("完成天数: \(waterData.completedDays(for: statsRange)) / \(waterData.totalDays(for: statsRange)) 天")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(Theme.textPrimary)
                         }
                         HStack(spacing: 4) {
                             Circle().fill(Theme.primary).frame(width: 8, height: 8)
-                            Text("总杯数: \(waterData.monthlyTotalCups) 杯")
+                            Text("总杯数: \(waterData.totalCups(for: statsRange)) 杯")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(Theme.textPrimary)
                         }
                         HStack(spacing: 4) {
                             Circle().fill(Theme.warning).frame(width: 8, height: 8)
-                            Text("日均: \(String(format: "%.1f", waterData.monthlyAvgCups)) 杯")
+                            Text("日均: \(String(format: "%.1f", waterData.avgCups(for: statsRange))) 杯")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(Theme.textPrimary)
                         }
@@ -417,9 +458,12 @@ struct UnifiedPanelView: View {
                 .padding(16)
                 .background(cardBG)
 
-                // 最近 7 天柱状图
-                recentChartCard(records: records)
-                statsTableCard(records: records)
+                // 柱状图（仅最近7天显示，仅有效记录）
+                if statsRange == .last7 {
+                    recentChartCard(records: waterData.validRecords(for: statsRange))
+                }
+                // 明细表（仅显示有记录的数据）
+                statsTableCard(records: waterData.validRecords(for: statsRange), rangeName: statsRange.rawValue)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -450,10 +494,19 @@ struct UnifiedPanelView: View {
     }
 
     private func recentChartCard(records: [DailyRecord]) -> some View {
-        let last7 = Array(records.suffix(7))
-        let maxCups = max(last7.map { $0.cups }.max() ?? 0, waterData.totalCups, 4)
-        let weekdaySymbols = Calendar.current.shortWeekdaySymbols
+        // 按真实日历取最近 7 天（含今天），从 records 中按 date 查找
+        let calendar = Calendar.current
         let today = Date()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let last7Dates: [(date: Date, dateStr: String, weekday: String, dayNum: Int)] = (0..<7).map { i in
+            let dayOffset = 6 - i
+            let date = calendar.date(byAdding: .day, value: -dayOffset, to: today)!
+            let dateStr = formatter.string(from: date)
+            let weekdayIdx = calendar.component(.weekday, from: date) - 1
+            return (date, dateStr, calendar.shortWeekdaySymbols[weekdayIdx], calendar.component(.day, from: date))
+        }
+        let maxCups = max(records.suffix(7).map { $0.cups }.max() ?? 0, waterData.totalCups, 4)
         let barMaxH: CGFloat = 80
 
         return VStack(alignment: .leading, spacing: 10) {
@@ -462,18 +515,15 @@ struct UnifiedPanelView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
                 Spacer()
-                Text("虚线为目标线")
+                Text("有效 \(records.count) 天")
                     .font(.system(size: 10))
                     .foregroundColor(Theme.textSecondary.opacity(0.8))
             }
 
             HStack(alignment: .bottom, spacing: 8) {
                 ForEach(0..<7, id: \.self) { i in
-                    let record = last7.indices.contains(i) ? last7[i] : nil
-                    let dayOffset = 6 - i
-                    let date = Calendar.current.date(byAdding: .day, value: -dayOffset, to: today)!
-                    let weekday = weekdaySymbols[Calendar.current.component(.weekday, from: date) - 1]
-                    let dayNum = Calendar.current.component(.day, from: date)
+                    let item = last7Dates[i]
+                    let record = records.first(where: { $0.date == item.dateStr })
                     let goalH = barMaxH * CGFloat(waterData.totalCups) / CGFloat(maxCups)
                     let cupH: CGFloat = {
                         guard let r = record else { return 2 }
@@ -504,10 +554,10 @@ struct UnifiedPanelView: View {
                         .frame(width: 18, height: barMaxH)
 
                         // 星期
-                        Text(weekday)
+                        Text(item.weekday)
                             .font(.system(size: 9, weight: .medium))
                             .foregroundColor(Theme.textSecondary)
-                        Text("\(dayNum)")
+                        Text("\(item.dayNum)")
                             .font(.system(size: 9))
                             .foregroundColor(Theme.textSecondary.opacity(0.7))
                     }
@@ -520,11 +570,11 @@ struct UnifiedPanelView: View {
         .background(cardBG)
     }
 
-    private func statsTableCard(records: [DailyRecord]) -> some View {
+    private func statsTableCard(records: [DailyRecord], rangeName: String) -> some View {
         let displayRecords = records.reversed()
         return VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("本月明细")
+                Text("\(rangeName)明细")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
                 Spacer()
@@ -757,7 +807,10 @@ struct SettingsPage: View {
             }
             HStack(spacing: 8) {
                 ForEach([4, 6, 8, 10, 12], id: \.self) { cups in
-                    Button(action: { setCups(cups) }) {
+                    Button(action: {
+                        AppLog.log("UI", "快速选择目标: \(cups)杯")
+                        setCups(cups)
+                    }) {
                         Text("\(cups)")
                             .font(.system(size: 14, weight: .semibold, design: .rounded))
                             .foregroundColor(waterData.totalCups == cups ? .white : Theme.textPrimary)
@@ -832,7 +885,10 @@ struct SettingsPage: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 150)
-                .onChange(of: intervalUnit) { _, _ in applyInterval() }
+                .onChange(of: intervalUnit) { oldUnit, newUnit in
+                    AppLog.log("UI", "切换间隔单位: \(oldUnit.rawValue) -> \(newUnit.rawValue)")
+                    applyInterval()
+                }
             }
             .frame(maxWidth: .infinity)
 
@@ -858,6 +914,7 @@ struct SettingsPage: View {
         if next < minVal { next = minVal }
         // 若当前已是下限且还要减小，则不再变动
         if cur <= minVal && delta < 0 { return }
+        AppLog.log("UI", "调整提醒间隔: \(cur)\(intervalUnit.rawValue) -> \(next)\(intervalUnit.rawValue)")
         intervalInput = String(format: "%g", next)
         applyInterval()
     }
@@ -866,7 +923,9 @@ struct SettingsPage: View {
         guard let v = Double(intervalInput), v > 0 else { return }
         // 单位为秒时低于 10 不生效
         if intervalUnit == .second && v < 10 { return }
-        waterData.setReminderInterval(v * intervalUnit.seconds)
+        let totalSeconds = v * intervalUnit.seconds
+        AppLog.log("UI", "应用提醒间隔: \(v)\(intervalUnit.rawValue) = \(totalSeconds)s")
+        waterData.setReminderInterval(totalSeconds)
         flashSaved()
     }
 
@@ -932,6 +991,7 @@ struct SettingsPage: View {
 
     private func adjustCups(_ delta: Int) {
         let newValue = max(1, min(20, waterData.totalCups + delta))
+        AppLog.log("UI", "调整目标杯数: \(waterData.totalCups) -> \(newValue)")
         setCups(newValue)
     }
 

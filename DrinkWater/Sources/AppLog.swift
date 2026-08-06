@@ -1,6 +1,7 @@
 import Foundation
 
 /// 日志工具：按天写文件到 ~/Library/Logs/DrinkWater/
+/// 每条日志直接写入文件，不做缓冲
 enum AppLog {
     /// 获取日志目录路径
     static var logDirectory: String {
@@ -29,7 +30,7 @@ enum AppLog {
         return dir
     }
 
-    /// 写入一条日志
+    /// 写入一条日志（直接写文件，不缓冲）
     static func log(_ tag: String, _ message: String) {
         let date = Date()
         let dateStr = dateFormatter.string(from: date)
@@ -54,4 +55,7 @@ enum AppLog {
             FileHandle.standardError.write(data)
         }
     }
+
+    /// 兼容旧调用（空实现）
+    static func flush() {}
 }

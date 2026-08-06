@@ -2,6 +2,12 @@ import Cocoa
 import SwiftUI
 import Combine
 
+/// 可成为 key window 的 NSPanel，解决 nonactivatingPanel 下按钮点击不响应
+class KeyablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     private let waterData = WaterData.shared
     private var timer: Timer?
@@ -28,7 +34,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .sink { [weak self] _ in self?.rebuildTimer() }
 
         NSApp.setActivationPolicy(.regular)
-        AppLog.log("APP", "初始化完成: 当前\(waterData.currentCups)/\(waterData.totalCups)杯, 已达目标=\(waterData.hasReachedGoal), 间隔=\(waterData.reminderInterval)s")
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        AppLog.log("APP", "初始化完成: 当前\(waterData.currentCups)/\(waterData.totalCups)杯, 已达目标=\(waterData.hasReachedGoal), 间隔=\(waterData.reminderInterval)s, lastReminderTime=\(formatter.string(from: waterData.lastReminderTime)), lastDrinkTime=\(formatter.string(from: waterData.lastDrinkTime))")
     }
 
     private func rebuildTimer() {
@@ -48,7 +56,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let panelView = UnifiedPanelView(waterData: waterData)
 
         let hosting = NSHostingController(rootView: panelView)
-        let window = NSWindow(contentViewController: hosting)
+        let window = KeyablePanel(contentViewController: hosting)
         window.setContentSize(NSSize(width: 420, height: 465))
         window.styleMask = [.borderless, .nonactivatingPanel]
         window.level = .floating
@@ -59,6 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.isMovableByWindowBackground = true
         window.hidesOnDeactivate = false
         window.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        window.becomesKeyOnlyIfNeeded = false
 
         // 右上角放置
         if let screen = NSScreen.main {
@@ -70,6 +79,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ))
         }
 
+        window.makeKeyAndOrderFront(nil)
+
         window.orderFrontRegardless()
         widgetWindow = window
     }
@@ -78,12 +89,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func checkReminder() {
         guard !isReminderShowing else { return }
+
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let now = Date()
+        let nowStr = fmt.string(from: now)
+        let drinkStr = fmt.string(from: waterData.lastDrinkTime)
+        let reminderStr = fmt.string(from: waterData.lastReminderTime)
+
         // 已达成今日目标，不再提醒
-        guard !waterData.hasReachedGoal else { return }
+        guard !waterData.hasReachedGoal else {
+            AppLog.log("CHECK", "跳过: 已达成目标 \(waterData.currentCups)/\(waterData.totalCups), now=\(nowStr), lastDrinkTime=\(drinkStr), lastReminderTime=\(reminderStr)")
+            return
+        }
+
+        // 上次提醒后用户已经喝过水，不重复提醒
+        guard waterData.lastDrinkTime <= waterData.lastReminderTime else {
+            AppLog.log("CHECK", "跳过: 上次提醒后用户已喝水, now=\(nowStr), lastDrinkTime=\(drinkStr), lastReminderTime=\(reminderStr)")
+            return
+        }
+
         // 距离上次提醒弹出 >= 设定间隔 才再弹
         let elapsed = waterData.secondsSinceLastReminder
         let interval = waterData.reminderInterval
-        AppLog.log("CHECK", "检测提醒: 已过\(Int(elapsed))s / 间隔\(Int(interval))s => \(elapsed >= interval ? "触发" : "跳过")")
+        AppLog.log("CHECK", "检测: now=\(nowStr), lastReminderTime=\(reminderStr), lastDrinkTime=\(drinkStr), 已过\(Int(elapsed))s / 间隔\(Int(interval))s => \(elapsed >= interval ? "触发" : "跳过")")
         guard elapsed >= interval else { return }
         showReminder()
     }
@@ -92,7 +121,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         isReminderShowing = true
         // 记录本次提醒时间
         waterData.markReminderShown()
-        AppLog.log("REMINDER", "弹出喝水提醒")
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let now = Date()
+        AppLog.log("REMINDER", "弹出喝水提醒, now=\(fmt.string(from: now)), lastReminderTime=\(fmt.string(from: waterData.lastReminderTime)), lastDrinkTime=\(fmt.string(from: waterData.lastDrinkTime)), 已喝\(waterData.currentCups)/\(waterData.totalCups)杯")
 
         let reminderView = ReminderView {
             self.dismissReminder()
@@ -125,7 +157,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         isReminderShowing = false
         reminderWindow?.close()
         reminderWindow = nil
-        AppLog.log("REMINDER", "关闭喝水提醒")
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        AppLog.log("REMINDER", "关闭喝水提醒, now=\(fmt.string(from: Date())), lastReminderTime=\(fmt.string(from: waterData.lastReminderTime)), lastDrinkTime=\(fmt.string(from: waterData.lastDrinkTime))")
     }
 
     // MARK: - 生命周期
@@ -135,5 +169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         timer?.invalidate()
         intervalObserver?.cancel()
         dismissReminder()
+        // 强制刷盘，确保缓冲区日志不丢失
+        AppLog.flush()
     }
 }
