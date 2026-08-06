@@ -57,7 +57,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let hosting = NSHostingController(rootView: panelView)
         let window = KeyablePanel(contentViewController: hosting)
-        window.setContentSize(NSSize(width: 420, height: 465))
+        window.setContentSize(NSSize(width: 315, height: 349))
         window.styleMask = [.borderless, .nonactivatingPanel]
         window.level = .floating
         window.backgroundColor = .clear

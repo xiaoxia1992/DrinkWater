@@ -138,7 +138,11 @@ struct UnifiedPanelView: View {
             RoundedRectangle(cornerRadius: 32)
                 .stroke(Color.white.opacity(0.5), lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.18), radius: 30, y: 10)
+        .shadow(color: Color.black.opacity(0.18), radius: 22, y: 7)
+        // 整体缩小到 0.75（75% 大小）
+        .compositingGroup()
+        .scaleEffect(0.75, anchor: .center)
+        .frame(width: 315, height: 349)
     }
 
     // MARK: - Tab 栏
@@ -299,16 +303,61 @@ struct UnifiedPanelView: View {
             }
             .padding(.bottom, 14)
         }
-        .alert("重置今日数据？", isPresented: $showResetAlert) {
-            Button("取消", role: .cancel) {
-                AppLog.log("UI", "取消重置")
+        // 自定义重置确认弹框（比系统 alert 小，75% 大小）
+        .overlay {
+            if showResetAlert {
+                ZStack {
+                    Color.black.opacity(0.25)
+                        .ignoresSafeArea()
+                        .onTapGesture { showResetAlert = false }
+
+                    VStack(spacing: 12) {
+                        Text("重置今日数据？")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(Theme.textPrimary)
+                        Text("当前 \(waterData.currentCups) 杯饮水记录将被清零。")
+                            .font(.system(size: 12))
+                            .foregroundColor(Theme.textSecondary)
+                            .multilineTextAlignment(.center)
+
+                        HStack(spacing: 10) {
+                            Button(action: {
+                                AppLog.log("UI", "取消重置")
+                                showResetAlert = false
+                            }) {
+                                Text("取消")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(Theme.textPrimary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .background(Capsule().fill(Color.gray.opacity(0.2)))
+                            }
+                            .buttonStyle(.plain)
+
+                            Button(action: {
+                                AppLog.log("UI", "确认重置今日数据")
+                                waterData.resetToday()
+                                showResetAlert = false
+                            }) {
+                                Text("确认重置")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 7)
+                                    .background(Capsule().fill(Theme.primaryGradient))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(18)
+                    .frame(width: 240)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14)
+                            .fill(Color.white.opacity(0.95))
+                    )
+                    .shadow(color: .black.opacity(0.2), radius: 8, y: 4)
+                }
             }
-            Button("确认重置", role: .destructive) {
-                AppLog.log("UI", "确认重置今日数据")
-                waterData.resetToday()
-            }
-        } message: {
-            Text("当前 \(waterData.currentCups) 杯饮水记录将被清零。")
         }
     }
 
